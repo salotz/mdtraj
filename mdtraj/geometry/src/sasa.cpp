@@ -61,7 +61,7 @@
  *     the output buffer to place the results in -- the surface area of each
  *     atom
  */
-static void asa_frame(const float* frame, const int n_atoms, const float* atom_radii,
+static int asa_frame(const float* frame, const int n_atoms, const float* atom_radii,
                       const float* sphere_points, const int n_sphere_points,
                       int* neighbor_indices, float* centered_sphere_points, float* areas)
 {
@@ -89,11 +89,16 @@ static void asa_frame(const float* frame, const int n_atoms, const float* atom_r
                 neighbor_indices[n_neighbor_indices]  = j;
                 n_neighbor_indices++;
             }
+            // check to see if there is distances too close together
             if (r2 < 1e-10f) {
-                printf("ERROR: THIS CODE IS KNOWN TO FAIL WHEN ATOMS ARE VIRTUALLY");
-                printf("ON TOP OF ONE ANOTHER. YOU SUPPLIED TWO ATOMS %f", sqrtf(r2));
-                printf("APART. QUITTING NOW");
-                exit(1);
+              // if there is return an error code
+              return -1;
+
+              // fix this to return an error code
+                // printf("ERROR: THIS CODE IS KNOWN TO FAIL WHEN ATOMS ARE VIRTUALLY");
+                // printf("ON TOP OF ONE ANOTHER. YOU SUPPLIED TWO ATOMS %f", sqrtf(r2));
+                // printf("APART. QUITTING NOW");
+                // exit(1);
             }
         }
 
@@ -132,6 +137,9 @@ static void asa_frame(const float* frame, const int n_atoms, const float* atom_r
 
         areas[i] *= constant * (atom_radii[i])*(atom_radii[i]);
     }
+
+    // all went well return a positive error code
+    return 1;
 }
 
 
@@ -168,7 +176,7 @@ static void generate_sphere_points(float* sphere_points, int n_points)
 }
 
 
-void sasa(const int n_frames, const int n_atoms, const float* xyzlist,
+int sasa(const int n_frames, const int n_atoms, const float* xyzlist,
           const float* atom_radii, const int n_sphere_points,
           const int* atom_mapping, const int n_groups, float* out)
 {
@@ -208,6 +216,9 @@ void sasa(const int n_frames, const int n_atoms, const float* xyzlist,
   float* outframe;
   float* outframebuffer;
 
+  // error code
+  int error_code;
+
   /* generate the sphere points */
   float* sphere_points = (float*) malloc(n_sphere_points*3*sizeof(float));
   generate_sphere_points(sphere_points, n_sphere_points);
@@ -220,15 +231,30 @@ void sasa(const int n_frames, const int n_atoms, const float* xyzlist,
   /* malloc the work buffers for each thread */
   wb1 = (int*) malloc(n_atoms*sizeof(int));
   wb2 = (float*) malloc(3*n_sphere_points*sizeof(float));
+
+  /* allocate memory and initialize to zeros for the output for an
+     individual frame, which is an array that is as long as the number
+     of atoms */
   outframebuffer = (float*) calloc(n_atoms, sizeof(float));
 
 #ifdef _OPENMP
   #pragma omp for
 #endif
+  /* calculate the ASA for each frame */
   for (i = 0; i < n_frames; i++) {
-    asa_frame(xyzlist + i*n_atoms*3, n_atoms, atom_radii, sphere_points,
-	      n_sphere_points, wb1, wb2, outframebuffer);
+    // run asa_frame and get the error code
+    error_code = asa_frame(xyzlist + i*n_atoms*3, n_atoms, atom_radii, sphere_points,
+                           n_sphere_points, wb1, wb2, outframebuffer);
+
+    // check the error code and if it was bad return the error code now
+    if (error_code == -1) {
+      return error_code;
+    }
+
+    /* get a reference to the frame in the out array */
     outframe = out + (n_groups * i);
+    /* copy values from the output of the individual frame data
+       returned from asa_frame */
     for (j = 0; j < n_atoms; j++) {
         outframe[atom_mapping[j]] += outframebuffer[j];
     }
@@ -242,4 +268,8 @@ void sasa(const int n_frames, const int n_atoms, const float* xyzlist,
 #endif
 
   free(sphere_points);
+
+  // all went good, return the error code
+  return error_code;
+
 }

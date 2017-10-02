@@ -73,7 +73,7 @@ cdef extern from "geometry.h" nogil:
                               int* atom1, int* atom2, float* distance)
 
 cdef extern from "sasa.h":
-    void sasa(const int n_frames, const int n_atoms, const float* xyzlist,
+    int sasa(const int n_frames, const int n_atoms, const float* xyzlist,
               const float* atom_radii, const int n_sphere_points,
               const int* atom_mapping, const int n_groups, float* out) nogil
 
@@ -195,8 +195,10 @@ def _sasa(float[:, :, ::1] xyz,
           float[:, ::1] out):
     cdef int n_frames = xyz.shape[0]
     cdef int n_atoms = xyz.shape[1]
-    sasa(n_frames, n_atoms, &xyz[0,0,0], &atom_radii[0], n_sphere_points,
-         &atom_outmapping[0], out.shape[1], &out[0,0])
+    cdef int error_code = sasa(n_frames, n_atoms, &xyz[0,0,0], &atom_radii[0], n_sphere_points,
+                      &atom_outmapping[0], out.shape[1], &out[0,0])
+
+    return error_code
 
 
 def _dssp(float[:, :, ::1] xyz,

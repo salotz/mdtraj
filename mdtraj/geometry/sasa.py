@@ -184,7 +184,11 @@ def shrake_rupley(traj, probe_radius=0.14, n_sphere_points=960, mode='atom', cha
         atom_radii = [_ATOMIC_RADII[atom.element.symbol] for atom in traj.topology.atoms]
     radii = np.array(atom_radii, np.float32) + probe_radius
 
-    _geometry._sasa(xyz, radii, int(n_sphere_points), atom_mapping, out)
+    error_code = _geometry._sasa(xyz, radii, int(n_sphere_points), atom_mapping, out)
+
+    # check the error code and raise appropriate errors
+    if error_code == -1:
+        raise ValueError("Coordinates of atoms were too close together and could not be calculated")
 
     if get_mapping == True:
         return out, atom_mapping
